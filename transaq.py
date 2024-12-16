@@ -4,14 +4,38 @@
 """
 
 
-
+import datetime
 import matplotlib
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import mplfinance as mpf
+import matplotlib.dates as mdates
+
+import matplotlib.units as munits
+converter = mdates.ConciseDateConverter()
+munits.registry[np.datetime64] = converter
+munits.registry[datetime.date] = converter
+munits.registry[datetime.datetime] = converter
+
 from io import StringIO
-import numpy as np
+
 import cProfile
+
+# logging
+import coloredlogs
+import logging
+import sys
+
+logger = logging.getLogger(__name__)
+coloredlogs.install(level=logging.DEBUG, logger=logger, isatty=True,
+                    fmt="%(asctime)s %(levelname)-8s %(message)s",
+                    stream=sys.stdout,
+                    datefmt='%Y-%m-%d %H:%M:%S')
+
+logger.debug("this is a debugging message")
+
+
 
 # Your data as a multi-line string
 data = """RIU4,25/07/2024 14:41:57,113320,2,К
@@ -63,14 +87,17 @@ def heatmap(data, row_labels, col_labels, ax=None,
     cbar.ax.set_ylabel(cbarlabel, rotation=-90, va="bottom")
 
     # Show all ticks and label them with the respective list entries.
-    col_labels = sorted([x[1] for x in data.columns])
-    ax.set_xticks(np.append(np.arange(0,data.shape[1],data.shape[1]//4+1),data.shape[1])
-                  , labels=[col_labels[x] for x in np.arange(0,data.shape[1],data.shape[1]//4+1)]+[col_labels[-1]]
+    formatter = matplotlib.dates.DateFormatter('%H:%M')
+    col_labels = sorted([formatter(x) for x in data.columns])
+    xTiks = data.shape[1]// 30 +1
+    ax.set_xticks(np.append(np.arange(0,data.shape[1],data.shape[1]//xTiks+1),data.shape[1])
+                  , labels=[col_labels[x] for x in np.arange(0,data.shape[1],data.shape[1]//xTiks+1)]+[col_labels[-1]]
                   )
+    # ax.xaxis.set_major_formatter(formatter)
     ax.set_yticks(np.append(np.arange(0, data.shape[0], data.shape[0]//4+1),data.shape[0])
                 , labels=[row_labels[x] for x in np.arange(0, data.shape[0], data.shape[0]//4+1)]+[row_labels[-1]]
                 )
-
+    logger.info(f'data.shape[0]:{data.shape}')
     # Let the horizontal axes labeling appear on top.
     ax.tick_params(top=True, bottom=False,
                    labeltop=True, labelbottom=False)
@@ -203,7 +230,7 @@ def TransaqToOHLCV(df):
                          'Low': gTicTime.min('price')['price'], 'Close': gTicTime.last('price')['price'],
                          'Volume': gTicTime.sum('volume')['volume']})
 def resample(df,tic='',tf='1min'):
-    return df.loc[tic].resample('1min').agg({
+    return df.loc[tic].resample(tf).agg({
         'Open': 'first',
         'High': 'max',
         'Low': 'min',
@@ -213,27 +240,39 @@ def resample(df,tic='',tf='1min'):
 def main():
     # Use StringIO to simulate a file object from the string data
     # fileName = StringIO(data)
-    fileName = r'\\Home-pc\d\share\finam\transaq\240729.txt'
+    fileName = r'\\HOME-PC\tf\transaqExport\240913.txt'
     df = readTransaqExportFile(fileName)
     df_ohlcv = TransaqToOHLCV(df)
 
     print(df_ohlcv.index.levels[0])
     for tic in df_ohlcv.index.levels[0]:
+        logger.info(f'ticer:{tic}')
         resampledDF = resample(df_ohlcv,tic)
         plot(resampledDF, title=tic)
         # plot heat map
-        g= df.loc[tic].groupby(['price', pd.Grouper(freq='5min', level=0)])
-        df_grouped = g.sum('Price').unstack().sort_index(axis=1, level=1)
-        time_idx = sorted([x[1] for x in df_grouped.columns])
+        dfTic = df.loc[tic]
+        bins = np.histogram_bin_edges(dfTic['price'], 100)
+        dig = np.digitize(dfTic['price'], bins) - 1
+        dfTic['price'] = bins[dig]
+        g= dfTic.groupby(['price', pd.Grouper(freq='1min', level=0)])
+        logger.info(f'ngroups: {g.ngroups}')
+        df_grouped = g.sum().unstack().sort_index(axis=1, level=1)['volume']
+        df_grouped = df_grouped.rename(columns={k: matplotlib.dates.date2num(k) for k in df_grouped.columns})
+        k = df_grouped.shape[0]/ df_grouped.shape[1]
+        logger.info(f'df_grouped.shape: {df_grouped.shape}, ratio: {k:2f}')
+        time_idx = sorted([x for x in df_grouped.columns])
         price_idx = df_grouped.index
-        fig, ax = plt.subplots()
-        im, cbar = heatmap(df_grouped, price_idx, time_idx, ax=ax,
-                           cmap="YlGn", cbarlabel="Volume",origin='lower')
-        texts = annotate_heatmap(im, valfmt="{x:.1f} t")
+        fig, ax = plt.subplots(figsize=(15//k+1, 15))
+        im, cbar = heatmap(df_grouped, price_idx, time_idx, ax=ax
+                           ,cmap="YlGn"  # legend of color and dot type
+                           , cbarlabel="Volume" # titel of heat map legend bar
+                           ,origin='lower' # Miror axis y
+                           )
+        # texts = annotate_heatmap(im, valfmt="{x:.1f} t")
         fig.tight_layout()
         plt.title(tic)
         plt.show()
-        print(df_grouped)
+        logger.info(tic)
 
 
 if __name__ == "__main__":
