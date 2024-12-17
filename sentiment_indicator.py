@@ -105,27 +105,7 @@ def update(db):
     где 1 максимально покупать, 0 нейтрально, -1 максимально продовать, если текст не евляется обзором рынка ценных бумаг 
     то None. В ответе не должно быть текста, только число или None."""
 
-    # senIndicatorDbFileName = f'sanIndicatorTopicDB_{model}.json'
-    # from pathvalidate import sanitize_filepath
-    # senIndicatorDbFileName = sanitize_filepath(senIndicatorDbFileName)
-    # # check existing and create if file not exist
-    #
-    # f = Path(senIndicatorDbFileName)
-    # if not f.is_file():
-    #     with f.open('w', encoding='utf8') as file:
-    #         file.write(json.dumps({'sentimentIndicatorHistory':{}}))
-    # read review texts database
-    # Calculate sentiment indicator based on smar-lab.ru top topics list parsed by LLM
-    # Result saved to json db file in current folder.
 
-    # with f.open('r', encoding='utf8') as file:
-    #     senIndicatorTopicDB = json.load(file)
-    # senIndicatorTopicDB = db.db
-
-
-    # get top topic url list
-    # topicIdList = getTopTopicList(url=topTopicListUrl)
-    # sources list to get topic texts from
     sources = [
         # 'ttps://smart-lab.ru/vtop/
         dict(listFunc = getListFromUrl,
@@ -177,28 +157,24 @@ def update(db):
                 except Exception as e:
                     logger.error(e)
                     senIndicatorTopicDB.update({topicUrl: {"rec":0.000000001}})
-                with db.f.open('w', encoding='utf8') as file:
-                    file.write(json.dumps(senIndicatorTopicDB))
+                db.write()
+                # with db.f.open('w', encoding='utf8') as file:
+                #     file.write(json.dumps(senIndicatorTopicDB))
 
     # calculate summary indicator for topic list
     finalRes = {k: v for k, v in senIndicatorTopicDB.items() if k in topicIdList}
     logger.info(finalRes)
-    IndicatorList = [v for v in [v.get('rec',0) for k, v in senIndicatorTopicDB.items() if k in topicIdList] if type(v) is float or type(v) is int]
+    IndicatorList = [v for v in [v.get('rec',None) for k, v in senIndicatorTopicDB.items() if k in topicIdList] if type(v) is float or type(v) is int]
     sentimentIndicator = sum(IndicatorList)/len(IndicatorList)
-    sentimentIndicatorHistory = senIndicatorTopicDB.get('sentimentIndicatorHistory',{})
-    sentimentIndicatorHistory.update({json.dumps(datetime.now().date().isoformat()): sentimentIndicator})
+    sentimentIndicatorHistory = senIndicatorTopicDB['sentimentIndicatorHistory']
+    sentimentIndicatorHistory.update({datetime.now().date().isoformat(): sentimentIndicator})
     senIndicatorTopicDB.update({'sentimentIndicatorHistory': sentimentIndicatorHistory})
-
-    # # write updated db
-    # with f.open('w', encoding='utf8') as file:
-    #     file.write(json.dumps(senIndicatorTopicDB))
-    # logger.info(f'sentimentIndicator: {senIndicatorTopicDB.get("sentimentIndicatorHistory")}')
-    # print('\tdate\tsentimentIndicator:\n'+'\n'.join([ f"\t{k:>}\t{senIndicatorTopicDB['sentimentIndicatorHistory'][k]:>8.2f}"
-    #         for k in sorted(list(senIndicatorTopicDB['sentimentIndicatorHistory'].keys()), reverse=True)])
-    #       )
+    db.write()
 
 class DB:
     def __init__(self,  *args, **kwargs):
+        self.logger = kwargs.get('logger') if kwargs.get('logger') else logging.getLogger()
+
         self.modelList = [ # model name list
                         "llama3.1:70b",  # 0
                         "glm4:9b-chat-fp16",  # 1
@@ -209,43 +185,50 @@ class DB:
                         ]
         if kwargs.get('model') and kwargs.get('model') in self.modelList:
             self.model = kwargs.get('model')
-            logger.debug(f'Use model: {self.model}')
+            self.logger.debug(f'Use model: {self.model}')
         else:
             self.model = self.modelList[0]
-            logger.debug(f'Using default model: {self.model}')
+            self.logger.debug(f'Using default model: {self.model}')
+
     def __enter__(self):
         # read review texts database
         senIndicatorDbFileName = f'sanIndicatorTopicDB_{self.model}.json'
-        logger.debug(f'SanIndicatorDbFileName: {senIndicatorDbFileName}')
+        self.logger.debug(f'SanIndicatorDbFileName: {senIndicatorDbFileName}')
         # check existing and create if file not exist
         senIndicatorDbFileName = sanitize_filepath(senIndicatorDbFileName)
         self.f = Path(senIndicatorDbFileName)
         if not self.f.is_file():
-            logger.info(f'SanIndicatorDbFileName: {senIndicatorDbFileName}, does not exist.')
-            with self.f.open('w', encoding='utf8') as file:
-                file.write(json.dumps({'sentimentIndicatorHistory':{}}))
-            logger.info(f'New db created.')
+            self.logger.error(f'SanIndicatorDbFileName: {senIndicatorDbFileName}, does not exist.')
+            raise BaseException
+            # with self.f.open('w', encoding='utf8') as file:
+            #     file.write(json.dumps({'sentimentIndicatorHistory':{}}))
+            # self.logger.info(f'New db created.')
         with self.f.open('r', encoding='utf8') as file:
             self.db = json.load(file)
-        logger.debug(f'db loaded and initialized.')
+        self.logger.debug(f'db loaded and initialized.')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+    def write(self):
+        """ wrirte updated db"""
         # write updated db
         with self.f.open('w', encoding='utf8') as file:
             file.write(json.dumps(self.db))
+        self.logger.info(f'db updated.')
 
     def show(self,):
         # read and show indicator db
         # show db
         import pandas as pd
         import matplotlib.pyplot as plt
-        logger.info(f'sentimentIndicator: {self.db.get("sentimentIndicatorHistory")}')
+        from dateutil import parser
+        self.logger.info(f'sentimentIndicator: {self.db.get("sentimentIndicatorHistory")}')
         d = {k: self.db['sentimentIndicatorHistory'][k] for k in sorted(list(self.db['sentimentIndicatorHistory'].keys()), reverse=False)}
         print('\tdate\tsentimentIndicator:\n' + '\n'.join([f"\t{k:>}\t{self.db['sentimentIndicatorHistory'][k]:>8.2f}"
                                                            for k in sorted(list(d.keys()), reverse=False)]))
         df = pd.DataFrame({'ind':d.values()},
-                          index=map(lambda x: datetime.strptime(x[1:-1], '%Y-%m-%d'),d.keys())
+                          index=map(lambda x: parser.parse(x), d.keys()) #(x[1:-1], '%Y-%m-%d'),d.keys())
                           )
         df.sort_index(inplace=True)
         df.plot(kind='line', title='Sentiment indicator', legend=None)
@@ -272,7 +255,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger = logging.getLogger(__name__)
-    coloredlogs.install(level=logging.ERROR, logger=logger, isatty=True,
+    coloredlogs.install(level=args.verbose, logger=logger, isatty=True,
                         fmt="%(asctime)s %(levelname)-8s %(message)s",
                         # stream=sys.stdout,
                         datefmt='%Y-%m-%d %H:%M:%S')
@@ -286,11 +269,11 @@ if __name__ == "__main__":
 
     if args.command == 'update':
         logger.info(f'Update...')
-        with DB(model=args.model) as db:
+        with DB(model=args.model, logger=logger) as db:
             update(db)
     elif args.command == 'show':
         logger.info(f'Show...')
-        with DB(model=args.model) as db:
+        with DB(model=args.model, logger=logger) as db:
             db.show()
     else:
         logger.error(f"Unknown command: {args.command}")

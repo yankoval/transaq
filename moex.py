@@ -86,6 +86,7 @@ def toDfCandles(func):
     return wrapper
 candles = toDfCandles(loadCandlesPage) # multiformat variant (df|list)
 
+
 def secInfo(secid):
     """ securities information and data from iss """
     # load data in iss.moex.com format
