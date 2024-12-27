@@ -31,7 +31,7 @@ from moex import loadCandlesPage, candles, series, toDfSeries, futSeries, secInf
 
 def kMeansCentrioids(x):
     """Preprocessing Kmeans. Add Kmeans levels """
-    kmeans = KMeans(init="k-means++") # , n_clusters=20, n_init=4
+    kmeans = KMeans(init="k-means++", n_clusters=20, n_init=4) # , n_clusters=20, n_init=4
     #x = list(df)
     a = kmeans.fit(np.reshape(x,(len(x),1)))
 
@@ -82,8 +82,8 @@ def indicators(df):
 
 
 def plotDay(df, dfS, validateLearnRatio=0.9, plot=True):
-    # db scan setting for level clusterization
-    # lernValidateRatio ratio of records out of the forecastiong for validation
+    """ db scan setting for level clusterization
+     lernValidateRatio ratio of records out of the forecastiong for validation"""
     epsLev0, epsLev1  = 800, 0.03 # 0.039
     print(df.shape, df.index[0],df.index[-1])
     dfPast = df.iloc[:int(df.shape[0]*validateLearnRatio)]
@@ -205,11 +205,36 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         df = indicators(df)
         calculate_fractals(dfS)
         dfS = indicators(dfS)
+        levels = plotDay(dfS,df,plot=False, validateLearnRatio=1) # get levels
+        levels = list(map(lambda x: int((x // tikInfo.MINSTEP)*tikInfo.MINSTEP), levels)) # round as ticker price step
 
-        levels = plotDay(dfS,df,plot=False)
-        levels = list(map(lambda x: int((x // tikInfo.MINSTEP)*tikInfo.MINSTEP), levels))
+        # chose 10 levels nearest to ticker last close value
+        close = dfS.iloc[-1].Close
+        levels = sorted(levels, key=lambda x: abs(x - close) / close)[:10]
+
+        # Transaq atf indicator externLevels have 0-9 - 10 lines. We read them from ferst file line til 10th file line.
+        # So if we have more levels and market value in extremum we have to sort out levels in file in proper direction.
+        # if market value is high then begin with highest level to lowest etc.
+        # to prevent swith levels every time when market value cross critical level we change sort order only if market
+        # come less thern 40% or above 60% of levels detected.
+        # levels.sort(reverse=False) # sort out
+        # idx = (np.abs(np.asarray(levels) - dfS.iloc[-1].Close)).argmin() # get index of nearest to tiker last close value
+        # # detect order direction in old file
+        # with open(exportFilePath + tikInfo.SHORTNAME + '.txt', 'rt') as f:
+        #     lines = [line.rstrip() for line in f]
+        #
+        # if all([lines[i]<=lines[i+1] for i in range(len(lines)-1)]): # if old file has up direction order
+        #     logger.info(f'{tikInfo.SHORTNAME} old sort direction Up (market was low), idx: {idx}, len: {len(levels)}')
+        #     levels.sort(reverse=int(idx) > len(levels) * 0.6) # Swich sort order only if we are near end of levels list
+        # elif all([lines[i]>=lines[i+1] for i in range(len(lines)-1)]):
+        #     logger.info(f'{tikInfo.SHORTNAME} old sort direction Down (market was high), idx: {idx}, len: {len(levels)}')
+        #     levels.sort(reverse=int(idx) < len(levels) * 0.4)
+        # else: # old file is not sorted
+        #     logger.error(f'Old level not sorted: {tikInfo.SHORTNAME}, {lines}.')
+        #     levels.sort( reverse=int(idx) < len(levels) * 0.5)
+
         with open(exportFilePath + tikInfo.SHORTNAME + '.txt', 'wt') as f:
-            f.write('\n'.join(map(lambda x: str(x),levels)))
+            f.write('\n'.join(map(lambda x: str(x),levels[:10])))
         print('\n'.join(map(lambda x: str(x),levels)))
 
 if __name__ == "__main__":
