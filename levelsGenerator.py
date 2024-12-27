@@ -5,8 +5,7 @@ import os
 import coloredlogs
 import logging
 import sys
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
+
 import argparse
 import constants
 from pathlib import Path
@@ -19,8 +18,6 @@ import textwrap
 from tapy import Indicators
 from sklearn.cluster import KMeans
 import pandas as pd, numpy as np
-import io
-import urllib.request
 from datetime import datetime, date, timedelta
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
