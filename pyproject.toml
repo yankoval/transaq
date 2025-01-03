@@ -1,6 +1,5 @@
 [project]
 name = "transaq"
-requires-python = ">= 3.8"
 authors = [
   {name = "Ivan Kiselev", email = "yankoval@gmail.com"},
 ]
