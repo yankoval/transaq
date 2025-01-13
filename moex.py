@@ -18,14 +18,68 @@
 # 7 - 1 неделя
 # 31 - 1 месяц
 
+# Examples:
+# df = pd.read_csv(r'https://iss.moex.com/iss/engines/futures/markets/forts/securities/RIH5/trades.csv?previous_session=1', skiprows=2,header=0, skipfooter=12, delimiter=';')
+# previous_session=1 что бы вывелась предидущая сессия
+# &TRADENO=1925038371093115277 начать со сделки с указанным номером
+# limit = 5000
+
 import requests
 import pandas as pd
 import json
 from datetime import datetime, date, timedelta
+from collections import namedtuple
 
 apiKey = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJaVHA2Tjg1ekE4YTBFVDZ5SFBTajJ2V0ZldzNOc2xiSVR2bnVaYWlSNS1NIn0.eyJleHAiOjE3MzQ4NzY0MTMsImlhdCI6MTczMjI4NDQxMywiYXV0aF90aW1lIjoxNzMyMjg0MDE0LCJqdGkiOiIyNmUwZjczNS02ODA1LTQ2OWQtOGQzZi00N2VkMGRhZmZkNjIiLCJpc3MiOiJodHRwczovL3NzbzIubW9leC5jb20vYXV0aC9yZWFsbXMvY3JhbWwiLCJhdWQiOlsiYWNjb3VudCIsImlzcyJdLCJzdWIiOiJmOjBiYTZhOGYwLWMzOGEtNDlkNi1iYTBlLTg1NmYxZmU0YmY3ZTozNmE1ZTczZS05OTViLTRiNTUtOWVlMS0zMmE5NGM3NTljZDUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJpc3MiLCJzZXNzaW9uX3N0YXRlIjoiYjBjOTdjYWUtNjVhMi00ODUyLTg4OTEtZTVmNDg2ZDAyNGU4IiwiYWNyIjoiMSIsImFsbG93ZWQtb3JpZ2lucyI6WyIvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBvZmZsaW5lX2FjY2VzcyBpc3NfYWxnb3BhY2sgcHJvZmlsZSBlbWFpbCIsInNpZCI6ImIwYzk3Y2FlLTY1YTItNDg1Mi04ODkxLWU1ZjQ4NmQwMjRlOCIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiaXNzX3Blcm1pc3Npb25zIjoiMTM3LCAxMzgsIDEzOSwgMTQwLCAxNjUsIDE2NiwgMTY3LCAxNjgsIDMyOSwgNDIxIiwibmFtZSI6ItCY0LLQsNC9INCa0LjRgdC10LvRkdCyIiwicHJlZmVycmVkX3VzZXJuYW1lIjoiMzZhNWU3M2UtOTk1Yi00YjU1LTllZTEtMzJhOTRjNzU5Y2Q1IiwiZ2l2ZW5fbmFtZSI6ItCY0LLQsNC9IiwiZmFtaWx5X25hbWUiOiLQmtC40YHQtdC70ZHQsiJ9.iwQXQrn6tU1R5Ek1HS_ccNiKNuTPs8toPkjjvxDN2OTvIU2kzUamsRYfrXMwmyRmFSvpByWc0E_1-uhzRuak0RsXJ9xKogCQGKiNEbBf7ELDA45FcQM56hhWOrMIYNDC57Gbi-stTELzMGmBijg5tt2vMn4q9VKaLoYMJJ3yuzgTnWz1VqpKCSAGYokT1k-17eQYSFpWPdR61G09-Nezy7P01XPGDuket0-9o5eUar15x07bwWrulB8VXZrAcQ7Z75XM5qJyUSXgtdenCHgmXV3b5WzfAoNrL5AXvutzk5YtyJEFpyi3oOUIjTXTuZGtPfB-DrXmtlpo7Ydm1O3QQw'
 baseUrl = 'https://iss.moex.com/iss'
 
+moexTypes = dict()
+marketSheme = dict()
+
+def moexMarketSheme():
+    """ read base market data like boards engines etc"""
+    # index.xml
+    url = f'{baseUrl}/index.json'
+    headers = {
+      'Authorization': f'Bearer {apiKey}',
+    }
+    # print(url)
+    response = requests.request("GET", url, headers=headers)
+    if response.status_code == 200:
+        try:
+          # print(response.json)
+          res = json.loads(response.text)
+          if not res.get('engines', False):
+              print(f'Error loading market sheme')
+              raise Exception
+          for mType in res.keys():
+            moexTypes.update({mType: namedtuple(mType, res[mType]['columns'])})
+            tmp =[]
+            for row in res[mType]['data']:
+                tmp.append(moexTypes[mType](*row))
+            marketSheme.update({mType:tmp})
+          else:
+              return None
+        except json.decoder.JSONDecodeError:
+            print(f'Error parsr json responce: {response.text[:50]}')
+    else:
+        print(f'Error request responce : {response.status_code}')
+        raise Exception
+def loadLastDeals(secId:str="SBER"):
+    """ Load last session dials, return pandas dataframe """
+    secInf, engine, market, board  = secInfo(secId)
+    if secInf == None:
+        return pd.DataFrame()
+    # boardGroupInfo = [row for row in marketSheme['boardgroups'] if row.name == secInf.group]
+    # if len(boardGroupInfo) != 1:
+    #     return pd.DataFrame()
+    # boardGroupInfo = boardGroupInfo[0]
+    #
+    # engine, market, boards = boardGroupInfo.trade_engine_name, boardGroupInfo.market_name, secInf.primary_boardid
+    df = pd.read_csv(
+        f'{baseUrl}/engines/{engine}/markets/{market}/securities/{secId}/trades.csv?previous_session=1',
+        skiprows=2, header=0, skipfooter=12, delimiter=';')
+    return df
 def loadCandlesPage(sec:str= 'SBER', dateFrom:date=None, dateTo:date =None, interval='60', start='0'):
     # load data in iss.moex.com format, sec = 'SBER', interval in ['1','10','60','24','7','31']
     dateFrom = date.today() - timedelta(days=1) if dateFrom is None else dateFrom
@@ -33,7 +87,7 @@ def loadCandlesPage(sec:str= 'SBER', dateFrom:date=None, dateTo:date =None, inte
     engines, markets, boards = 'futures', 'forts', 'rfud'
     assert  interval in ['1','10','60','24','7','31'] # Check interval
     # print(dateFrom,dateTo)
-    apiKey = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJaVHA2Tjg1ekE4YTBFVDZ5SFBTajJ2V0ZldzNOc2xiSVR2bnVaYWlSNS1NIn0.eyJleHAiOjE3MzQ4NzY0MTMsImlhdCI6MTczMjI4NDQxMywiYXV0aF90aW1lIjoxNzMyMjg0MDE0LCJqdGkiOiIyNmUwZjczNS02ODA1LTQ2OWQtOGQzZi00N2VkMGRhZmZkNjIiLCJpc3MiOiJodHRwczovL3NzbzIubW9leC5jb20vYXV0aC9yZWFsbXMvY3JhbWwiLCJhdWQiOlsiYWNjb3VudCIsImlzcyJdLCJzdWIiOiJmOjBiYTZhOGYwLWMzOGEtNDlkNi1iYTBlLTg1NmYxZmU0YmY3ZTozNmE1ZTczZS05OTViLTRiNTUtOWVlMS0zMmE5NGM3NTljZDUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJpc3MiLCJzZXNzaW9uX3N0YXRlIjoiYjBjOTdjYWUtNjVhMi00ODUyLTg4OTEtZTVmNDg2ZDAyNGU4IiwiYWNyIjoiMSIsImFsbG93ZWQtb3JpZ2lucyI6WyIvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBvZmZsaW5lX2FjY2VzcyBpc3NfYWxnb3BhY2sgcHJvZmlsZSBlbWFpbCIsInNpZCI6ImIwYzk3Y2FlLTY1YTItNDg1Mi04ODkxLWU1ZjQ4NmQwMjRlOCIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiaXNzX3Blcm1pc3Npb25zIjoiMTM3LCAxMzgsIDEzOSwgMTQwLCAxNjUsIDE2NiwgMTY3LCAxNjgsIDMyOSwgNDIxIiwibmFtZSI6ItCY0LLQsNC9INCa0LjRgdC10LvRkdCyIiwicHJlZmVycmVkX3VzZXJuYW1lIjoiMzZhNWU3M2UtOTk1Yi00YjU1LTllZTEtMzJhOTRjNzU5Y2Q1IiwiZ2l2ZW5fbmFtZSI6ItCY0LLQsNC9IiwiZmFtaWx5X25hbWUiOiLQmtC40YHQtdC70ZHQsiJ9.iwQXQrn6tU1R5Ek1HS_ccNiKNuTPs8toPkjjvxDN2OTvIU2kzUamsRYfrXMwmyRmFSvpByWc0E_1-uhzRuak0RsXJ9xKogCQGKiNEbBf7ELDA45FcQM56hhWOrMIYNDC57Gbi-stTELzMGmBijg5tt2vMn4q9VKaLoYMJJ3yuzgTnWz1VqpKCSAGYokT1k-17eQYSFpWPdR61G09-Nezy7P01XPGDuket0-9o5eUar15x07bwWrulB8VXZrAcQ7Z75XM5qJyUSXgtdenCHgmXV3b5WzfAoNrL5AXvutzk5YtyJEFpyi3oOUIjTXTuZGtPfB-DrXmtlpo7Ydm1O3QQw'
+    # apiKey = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJaVHA2Tjg1ekE4YTBFVDZ5SFBTajJ2V0ZldzNOc2xiSVR2bnVaYWlSNS1NIn0.eyJleHAiOjE3MzQ4NzY0MTMsImlhdCI6MTczMjI4NDQxMywiYXV0aF90aW1lIjoxNzMyMjg0MDE0LCJqdGkiOiIyNmUwZjczNS02ODA1LTQ2OWQtOGQzZi00N2VkMGRhZmZkNjIiLCJpc3MiOiJodHRwczovL3NzbzIubW9leC5jb20vYXV0aC9yZWFsbXMvY3JhbWwiLCJhdWQiOlsiYWNjb3VudCIsImlzcyJdLCJzdWIiOiJmOjBiYTZhOGYwLWMzOGEtNDlkNi1iYTBlLTg1NmYxZmU0YmY3ZTozNmE1ZTczZS05OTViLTRiNTUtOWVlMS0zMmE5NGM3NTljZDUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJpc3MiLCJzZXNzaW9uX3N0YXRlIjoiYjBjOTdjYWUtNjVhMi00ODUyLTg4OTEtZTVmNDg2ZDAyNGU4IiwiYWNyIjoiMSIsImFsbG93ZWQtb3JpZ2lucyI6WyIvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBvZmZsaW5lX2FjY2VzcyBpc3NfYWxnb3BhY2sgcHJvZmlsZSBlbWFpbCIsInNpZCI6ImIwYzk3Y2FlLTY1YTItNDg1Mi04ODkxLWU1ZjQ4NmQwMjRlOCIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiaXNzX3Blcm1pc3Npb25zIjoiMTM3LCAxMzgsIDEzOSwgMTQwLCAxNjUsIDE2NiwgMTY3LCAxNjgsIDMyOSwgNDIxIiwibmFtZSI6ItCY0LLQsNC9INCa0LjRgdC10LvRkdCyIiwicHJlZmVycmVkX3VzZXJuYW1lIjoiMzZhNWU3M2UtOTk1Yi00YjU1LTllZTEtMzJhOTRjNzU5Y2Q1IiwiZ2l2ZW5fbmFtZSI6ItCY0LLQsNC9IiwiZmFtaWx5X25hbWUiOiLQmtC40YHQtdC70ZHQsiJ9.iwQXQrn6tU1R5Ek1HS_ccNiKNuTPs8toPkjjvxDN2OTvIU2kzUamsRYfrXMwmyRmFSvpByWc0E_1-uhzRuak0RsXJ9xKogCQGKiNEbBf7ELDA45FcQM56hhWOrMIYNDC57Gbi-stTELzMGmBijg5tt2vMn4q9VKaLoYMJJ3yuzgTnWz1VqpKCSAGYokT1k-17eQYSFpWPdR61G09-Nezy7P01XPGDuket0-9o5eUar15x07bwWrulB8VXZrAcQ7Z75XM5qJyUSXgtdenCHgmXV3b5WzfAoNrL5AXvutzk5YtyJEFpyi3oOUIjTXTuZGtPfB-DrXmtlpo7Ydm1O3QQw'
 
     # url = "https://apim.moex.com/iss/datashop/algopack/eq/obstats.json?date=2024-10-15"
     url = (f'{baseUrl}/engines/futures/markets/forts/boards/rfud/securities/{sec}/candles.json?from={dateFrom}'
@@ -90,12 +144,13 @@ candles = toDfCandles(loadCandlesPage) # multiformat variant (df|list)
 def secInfo(secid):
     """ securities information and data from iss """
     # load data in iss.moex.com format
-    baseUrl = 'https://iss.moex.com/iss'
+    # baseUrl = 'https://iss.moex.com/iss'
     engines, markets, boards, interval = 'futures', 'forts', 'rfud', 60
     # print(dateFrom,dateTo)
     # url = "https://iss.moex.com/iss/engines/futures/markets/forts/boards/rfud/securities/MXZ4.json"
-    url = f'{baseUrl}/engines/{engines}/markets/{markets}/boards/{boards}/securities/{secid}.json'
-
+    #https://iss.moex.com/iss/securities.json?q=MXZ4
+    # url = f'{baseUrl}/engines/{engines}/markets/{markets}/boards/{boards}/securities/{secid}.json'
+    url = f'{baseUrl}/securities.json?q={secid}'
     headers = {
       'Authorization': f'Bearer {apiKey}',
     }
@@ -104,13 +159,44 @@ def secInfo(secid):
     if response.status_code == 200:
         try:
           # print(response.json)
-          return json.loads(response.text)
+          res = json.loads(response.text)
+          if not res['securities']['data']:
+              print(f'Error loading {secid}')
+              return None
+          row = [row for row in res['securities']['data'] if secid in [row[1],row[2],row[5]] ]
+          if any(row):
+            s = namedtuple('sec', res['securities']['columns'])
+            secInf = s(*row[0])
+            boardGroupInfo = [row for row in marketSheme['boardgroups'] if row.name == secInf.group]
+            if len(boardGroupInfo) != 1:
+                return None
+            boardGroupInfo = boardGroupInfo[0]
+            engine, market, board = boardGroupInfo.trade_engine_name, boardGroupInfo.market_name, secInf.primary_boardid
+            return secInf, engine, market, board
+          else:
+              return None
         except json.decoder.JSONDecodeError:
             print(f'Error parsr json responce: {response.text[:50]}')
     else:
         print(f'Error request responce : {response.status_code}')
         raise Exception
-
+    # url = f'{baseUrl}/history/engines/{engines}/markets/{markets}/boards/{boards}/securities/{secid}.json'
+    # response = requests.request("GET", url, headers=headers)
+    # if response.status_code == 200:
+    #     try:
+    #         # print(response.json)
+    #         res = json.loads(response.text)
+    #         if not res['history']['data']:
+    #             print(f'Error loading {secid}')
+    #             return None
+    #     except json.decoder.JSONDecodeError:
+    #         print(f'Error parsr json responce: {response.text[:50]}')
+    # else:
+    #     print(f'Error request responce : {response.status_code}')
+    #     raise Exception
+    # s = namedtuple('sec', res['history']['columns'])
+    # secInf = s(*res['history']['data'][0])
+    # return secInf
 def futSeries():
     """ futures series information from iss """
   # https://iss.moex.com/iss/statistics/engines/futures/markets/forts/series.json
@@ -156,3 +242,4 @@ def toDfSeries(func):
 
 #def
 series = toDfSeries(futSeries) # multiformat variant candles(sec=series(formatDf=False)['series']['data'][0][0]) futSeries.__doc__
+moexMarketSheme()
