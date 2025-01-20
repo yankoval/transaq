@@ -1,0 +1,16 @@
+[project]
+name = "transaq"
+authors = [
+  {name = "Ivan Kiselev", email = "yankoval@gmail.com"},
+]
+dependencies = [
+  "requests",
+  "pandas>2.1.0",
+  "json",
+  "sklearn>1.3.0",
+  "tapy",
+  "coloredlogs",
+  "argparse",
+  "constants",
+  "textwrap",
+]
