@@ -235,7 +235,7 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         #     logger.error(f'Old level not sorted: {tikInfo.SHORTNAME}, {lines}.')
         #     levels.sort( reverse=int(idx) < len(levels) * 0.5)
 
-        with open(exportFilePath + tikInfo.SHORTNAME + '.txt', 'wt') as f:
+        with open(exportFilePath + tik + '.txt', 'wt') as f:
             f.write('\n'.join(map(lambda x: str(x),levels[:10])))
         print('\n'.join(map(lambda x: str(x),levels)))
 
