@@ -162,13 +162,13 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         exportFilePath = output_filepath
         df = pd.DataFrame()
 
-        sInfo = secInfo(tik) # Load tiker info
+        tikInfo, engine, market, board, tikInfoTraded = secInfo(tik) # Load tiker info
 
-        if not sInfo['securities']['data']:
+        if not tikInfo:
             print(f'Error loading {tik}')
             exit(-1)
-        s = namedtuple('sec',sInfo['securities']['columns'])
-        tikInfo = s(*sInfo['securities']['data'][0])
+        # s = namedtuple('sec',sInfo['securities']['columns'])
+        # tikInfo = s(*sInfo['securities']['data'][0])
 
 
         # Load data page by pege till got empty data
@@ -202,9 +202,14 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         df = indicators(df)
         calculate_fractals(dfS)
         dfS = indicators(dfS)
-        levels = plotDay(dfS,df,plot=False, validateLearnRatio=1) # get levels
-        levels = list(map(lambda x: int((x // tikInfo.MINSTEP)*tikInfo.MINSTEP), levels)) # round as ticker price step
-
+        levels = plotDay(dfS,df,plot=False, validateLearnRatio=1) # get leve
+        try:# ls
+            if tikInfo.type  in ['futures_forts']:
+                levels = list(map(lambda x: int((x//tikInfoTraded.securities.MINSTEP)*tikInfoTraded.securities.MINSTEP), levels)) # round as ticker price step
+            elif tikInfo.type in ['stock_index','stock_shares','common_share']:
+                levels = list(map(lambda x: round(x, tikInfoTraded.securities.DECIMALS), levels))
+        except:
+            pass # in INDEX tikers no tikInfo.MINSTEP
         # chose 10 levels nearest to ticker last close value
         close = dfS.iloc[-1].Close
         levels = sorted(levels, key=lambda x: abs(x - close) / close)[:10]
