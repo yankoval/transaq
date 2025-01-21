@@ -213,27 +213,7 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         # chose 10 levels nearest to ticker last close value
         close = dfS.iloc[-1].Close
         levels = sorted(levels, key=lambda x: abs(x - close) / close)[:10]
-
-        # Transaq atf indicator externLevels have 0-9 - 10 lines. We read them from ferst file line til 10th file line.
-        # So if we have more levels and market value in extremum we have to sort out levels in file in proper direction.
-        # if market value is high then begin with highest level to lowest etc.
-        # to prevent swith levels every time when market value cross critical level we change sort order only if market
-        # come less thern 40% or above 60% of levels detected.
-        # levels.sort(reverse=False) # sort out
-        # idx = (np.abs(np.asarray(levels) - dfS.iloc[-1].Close)).argmin() # get index of nearest to tiker last close value
-        # # detect order direction in old file
-        # with open(exportFilePath + tikInfo.SHORTNAME + '.txt', 'rt') as f:
-        #     lines = [line.rstrip() for line in f]
-        #
-        # if all([lines[i]<=lines[i+1] for i in range(len(lines)-1)]): # if old file has up direction order
-        #     logger.info(f'{tikInfo.SHORTNAME} old sort direction Up (market was low), idx: {idx}, len: {len(levels)}')
-        #     levels.sort(reverse=int(idx) > len(levels) * 0.6) # Swich sort order only if we are near end of levels list
-        # elif all([lines[i]>=lines[i+1] for i in range(len(lines)-1)]):
-        #     logger.info(f'{tikInfo.SHORTNAME} old sort direction Down (market was high), idx: {idx}, len: {len(levels)}')
-        #     levels.sort(reverse=int(idx) < len(levels) * 0.4)
-        # else: # old file is not sorted
-        #     logger.error(f'Old level not sorted: {tikInfo.SHORTNAME}, {lines}.')
-        #     levels.sort( reverse=int(idx) < len(levels) * 0.5)
+        levels = sorted(levels) # final sort to prevent
 
         with open(exportFilePath + tik + '.txt', 'wt') as f:
             f.write('\n'.join(map(lambda x: str(x),levels[:10])))
