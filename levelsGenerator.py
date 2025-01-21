@@ -204,7 +204,7 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         dfS = indicators(dfS)
         levels = plotDay(dfS,df,plot=False, validateLearnRatio=1) # get leve
         try:# ls
-            if tikInfo.type  in ['futures_forts']:
+            if tikInfo.type  in ['futures_forts','futures']:
                 levels = list(map(lambda x: int((x//tikInfoTraded.securities.MINSTEP)*tikInfoTraded.securities.MINSTEP), levels)) # round as ticker price step
             elif tikInfo.type in ['stock_index','stock_shares','common_share']:
                 levels = list(map(lambda x: round(x, tikInfoTraded.securities.DECIMALS), levels))
