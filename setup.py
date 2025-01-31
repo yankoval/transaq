@@ -12,7 +12,6 @@ setup(
     'coloredlogs>=15.0',
     'constants>=0.6.0',
     'tapy>=1.9.0',
-    'scikit-learn>=1.5.1',
     'lxml>=5.3.0',
     'tqdm>=4.66.5'],
     url='',
