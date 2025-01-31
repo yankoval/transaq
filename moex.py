@@ -73,7 +73,7 @@ def moexMarketSheme():
         raise Exception
 def loadLastDeals(secId:str="SBER"):
     """ Load last session dials, return pandas dataframe """
-    secInf, engine, market, board  = secInfo(secId)
+    secInf, engine, market, board, secInfTraded  = secInfo(secId)
     if secInf == None:
         return pd.DataFrame()
     # boardGroupInfo = [row for row in marketSheme['boardgroups'] if row.name == secInf.group]
