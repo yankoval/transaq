@@ -1,0 +1,13 @@
+requests~=2.27.1
+pandas~=1.5.3
+setuptools~=70.3.0
+matplotlib~=3.9.1
+numpy~=1.26.4
+mplfinance~=0.12.10b0
+coloredlogs~=15.0
+constants~=0.6.0
+tapy~=1.9.0
+scikit-learn~=1.5.1
+lxml~=5.3.0
+pathvalidate~=3.2.1
+tqdm~=4.66.5
