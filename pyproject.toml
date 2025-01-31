@@ -8,11 +8,8 @@ authors = [
 dependencies = [
   "requests",
   "pandas>1.2.2",
-  "json",
-  "sklearn>1.3.0",
   "tapy",
   "coloredlogs",
   "argparse",
   "constants",
-  "textwrap",
 ]

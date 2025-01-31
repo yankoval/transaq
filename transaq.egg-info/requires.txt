@@ -1,0 +1,6 @@
+requests
+pandas>1.2.2
+tapy
+coloredlogs
+argparse
+constants
