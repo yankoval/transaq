@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='market',
     version='1.0',
-    packages=[''],
+    packages=find_packages(),#[''],
     url='',
     license='',
     author='ivan',

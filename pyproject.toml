@@ -1,8 +1,10 @@
 [project]
 name = "transaq"
+version='1.0'
 authors = [
   {name = "Ivan Kiselev", email = "yankoval@gmail.com"},
 ]
+
 dependencies = [
   "requests",
   "pandas>2.1.0",
