@@ -15,7 +15,7 @@ import textwrap
 # finde cluster levels on market data
 #
 
-from tapy import Indicators
+# from tapy import Indicators
 from sklearn.cluster import KMeans
 import pandas as pd, numpy as np
 from datetime import datetime, date, timedelta
@@ -49,7 +49,7 @@ def normalization(df,columnSuffix = '', period=233, fixScale=0.1, fixShift = 0.5
         elif column in ['Volume']:
             df[column+columnSuffix] = fixScale * (df[column] - df[column].rolling(window=period).mean()) / df[column].rolling(window=period).std()
         if any(df[column].loc[(df[column]>=1) & (df[column]<=0)]):
-            print(f'Collumn: {c}')
+            print(f'Collumn: {column}')
 
 def calculate_fractals(df):
     """Calculate fractals"""
@@ -69,20 +69,20 @@ def calculate_fractals(df):
         , np.True_, np.False_
     )
 
-def indicators(df):
-    """Preprocessing add indicators"""
-    i= Indicators(df)
-    # i.fractals(column_name_high='fHigh', column_name_low='fLow')
-    i.sma()
-    i.atr()
-    return  i.df
+# def indicators(df):
+#     """Preprocessing add indicators"""
+#     i= Indicators(df)
+#     # i.fractals(column_name_high='fHigh', column_name_low='fLow')
+#     i.sma()
+#     i.atr()
+#     return  i.df
 
 
-def plotDay(df, dfS, validateLearnRatio=0.9, plot=True):
+def calcLevels(df, validateLearnRatio=0.9):
     """ db scan setting for level clusterization
      lernValidateRatio ratio of records out of the forecastiong for validation"""
     epsLev0, epsLev1  = 800, 0.03 # 0.039
-    print(df.shape, df.index[0],df.index[-1])
+    # print(df.shape, df.index[0],df.index[-1])
     dfPast = df.iloc[:int(df.shape[0]*validateLearnRatio)]
     fh = dfPast.loc[dfPast.fHigh==True].High
     fl = dfPast.loc[dfPast.fLow==True].Low
@@ -91,10 +91,7 @@ def plotDay(df, dfS, validateLearnRatio=0.9, plot=True):
     #fig = plt.figure(figsize=(40,15))
     apds, levels  = [],[]
     for j,f in  enumerate([[fh,kMeansCentrioids(list(fh)),'r'],[fl,kMeansCentrioids(list(fl)),'b']]):
-#         ax.plot(f[0])
-#         mpf.plot(df, vollume= True)
-#         ax.plot(df.Low)
-        print(j,f[1])
+        # print(j,f[1])
         levels = levels + list(f[1][0])
 
         #for i,l in enumerate(f[1][0]):
@@ -109,57 +106,16 @@ def plotDay(df, dfS, validateLearnRatio=0.9, plot=True):
     flToPlot = df.Low * df.fLow
     flToPlot[flToPlot==0] = np.nan
     lev = list([np.array(levels)[np.where(db.labels_==k)].mean() for k in np.unique(db.labels_)])
-    if not plot:
-        return lev
-    apds = apds + [mpf.make_addplot( # add levels to plot
-                                    [l]*len(df.iloc[-240:]), panel='main', color='g',label=f'${l:8.0f}$')
-                                   for l in lev
-          ] + [mpf.make_addplot( # add High fractal points to plot
-                            fhToPlot.iloc[-240:]
-                            , scatter=True, color='g')
-          ] + [mpf.make_addplot( # add Low fractal points to plot
-                            flToPlot.iloc[-240:]
-                            , scatter=True, color='r')
-          ] + [mpf.make_addplot( # add text description of levels to plot
-                                     [l]+[np.nan]*(df.iloc[-240:].shape[0]-1), panel='main', type='scatter', marker=f'${l:8.0f}$', markersize=40)
-                                  for l in lev
-          ]
-    print('-----------',len(np.unique(db.labels_)),
-         [np.array(levels)[np.where(db.labels_==k)].mean() for k in np.unique(db.labels_)]
-         )
-    mc = mpf.make_marketcolors(up='g',down='g',
-                           edge='lime')
-    s  = mpf.make_mpf_style(marketcolors=mc)
-    # apds.append(mpf.make_addplot(dfS, title='Real',type='ohlc'))
-    # figure, axes =
-    mpf.plot(df.iloc[-240:], addplot=apds, volume=True, type='candle', style=s, figscale=10
-             ,vlines=dict(vlines=[dfPast.iloc[-240:].index.max(),df.iloc[-240:].index.min()],linewidths=(1,2)),
-            fill_between=[
-                dict(
-                    y1 = df.iloc[-240:]['Close'].shift(+1).values + df.iloc[-240:]['atr'].shift(+1).values*1,
-                    y2 = df.iloc[-240:]['Close'].shift(+1).values - df.iloc[-240:]['atr'].shift(+1).values*1,
-                    alpha=0.2,color='#291010'),
-                dict(
-                    y1 = df.iloc[-240:]['Close'].shift(+1).values + df.iloc[-240:]['atr'].shift(+1).values*2,
-                    y2 = df.iloc[-240:]['Close'].shift(+1).values - df.iloc[-240:]['atr'].shift(+1).values*2,
-                    alpha=0.1,color='#296200'),
-                dict(y1 = levels[0],
-                     y2 = levels[0] + df.iloc[-240:]['atr'].values,
-                     alpha=0.1, color='#296200'),
-             ],
-            mav=(13, 233),
-            returnfig=True
-        )
-    mpf.show()
-    print("------------------------")
-
-
+    return lev
 
 
 def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging.Logger):
+    output_filepath = Path(output_filepath)
+    assert output_filepath.exists() and output_filepath.is_dir(), f'Wrong path: {output_filepath}'
     for tik in tikers:
         logger.info(f'Tiker: {tik}')
-        exportFilePath = output_filepath
+        exportFilePath = output_filepath / (tik + '.txt')
+        logger.info(f'Filename: {exportFilePath}')
         df = pd.DataFrame()
 
         tikInfo, engine, market, board, tikInfoTraded = secInfo(tik) # Load tiker info
@@ -199,10 +155,10 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         normalization(df)
 
         calculate_fractals(df)
-        df = indicators(df)
+        # df = indicators(df)
         calculate_fractals(dfS)
-        dfS = indicators(dfS)
-        levels = plotDay(dfS,df,plot=False, validateLearnRatio=1) # get leve
+        # dfS = indicators(dfS)
+        levels = calcLevels(dfS, df, plot=False, validateLearnRatio=1) # get leve
         try:# ls
             if tikInfo.type  in ['futures_forts','futures']:
                 levels = list(map(lambda x: int((x//tikInfoTraded.securities.MINSTEP)*tikInfoTraded.securities.MINSTEP), levels)) # round as ticker price step
@@ -215,7 +171,7 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         levels = sorted(levels, key=lambda x: abs(x - close) / close)[:10]
         levels = sorted(levels) # final sort to prevent
 
-        with open(exportFilePath + tik + '.txt', 'wt') as f:
+        with exportFilePath.open('wt') as f:
             f.write('\n'.join(map(lambda x: str(x),levels[:10])))
         print('\n'.join(map(lambda x: str(x),levels)))
 
