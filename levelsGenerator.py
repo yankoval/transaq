@@ -8,22 +8,13 @@ import logging
 import sys
 
 import argparse
-import constants
 from pathlib import Path
 import textwrap
+from tqdm import tqdm
 
-#
-# finde cluster levels on market data
-#
-
-# from tapy import Indicators
 from sklearn.cluster import KMeans
 import pandas as pd, numpy as np
-from datetime import datetime, date, timedelta
 from sklearn.cluster import DBSCAN
-import matplotlib.pyplot as plt
-from collections import namedtuple
-import mplfinance as mpf
 
 from moex import loadCandlesPage, candles, series, toDfSeries, futSeries, secInfo, validCandlesInterval
 
@@ -117,9 +108,9 @@ def genLevelsForTiker(tikers=[], output_filepath='.//',start='', end='', interva
     output_filepath = Path(output_filepath)
     assert output_filepath.exists() and output_filepath.is_dir(), f'Wrong path: {output_filepath}'
     for tik in tikers:
-        logger.info(f'Tiker: {tik}')
+        logger.debug(f'Tiker: {tik}')
         exportFilePath = output_filepath / (tik + '.txt')
-        logger.info(f'Filename: {exportFilePath}')
+        logger.debug(f'Filename: {exportFilePath}')
         tikInfo, engine, market, board, tikInfoTraded = secInfo(tik) # Load tiker info
         if not tikInfo:
             print(f'Error loading {tik}')
@@ -128,7 +119,7 @@ def genLevelsForTiker(tikers=[], output_filepath='.//',start='', end='', interva
 
         df = pd.DataFrame()
         freq = 'W' if interval in ['1'] else 'M'
-        for day in pd.period_range(start=start,end=end,freq=freq):
+        for day in tqdm(pd.period_range(start=start,end=end,freq=freq),desc=tik, leave=False):
             lastRow = df.shape[0]
             for timeout in range(100):
                 dfTmp = candles(sec=tik, interval=interval,
@@ -195,6 +186,9 @@ if __name__ == "__main__":
     parser.add_argument('-i', '--intervalCandles', dest='intervalCandles', default='60', type=str,
                         choices=validCandlesInterval,
                         help='Candles interval: 1 - min, 10 - 10 min, 60 - hour, 24 - day, 7 - week, 30 - month ')
+    parser.add_argument('-l', '--loglevel', dest='loglevel', default='ERROR', type=str,
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     parser.add_argument('-t', '--tikers_list', nargs='+', help='Tikers list. Like: "SBER RIH5"')
 
     # Parse command line arguments
@@ -202,7 +196,7 @@ if __name__ == "__main__":
 
     # logging
     logger = logging.getLogger(__name__)
-    coloredlogs.install(level=logging.DEBUG, logger=logger, isatty=True,
+    coloredlogs.install(level=args.loglevel.upper(), logger=logger, isatty=True,
                         fmt="%(asctime)s %(levelname)-8s %(message)s",
                         stream=sys.stderr,
                         datefmt='%Y-%m-%d %H:%M:%S')
@@ -224,7 +218,7 @@ if __name__ == "__main__":
 
     output_filepath = args.output_filepath if args.output_filepath else config.get('output_filepath','.')
     assert config['tikers'], f'No tikers provided: use conf file or --tikers_list command line option.'
-    for tik,param in config['tikers'].items():
+    for tik,param in tqdm(config['tikers'].items()):
         # Call the main function with the parsed arguments
         try:
             logger.info(f'{tik} with param:{param} processing.')
