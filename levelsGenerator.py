@@ -1,6 +1,7 @@
 #       24/12
 #       Generate levels for given tickers and write to file for transaq ATF script
 #
+import json
 import os
 import coloredlogs
 import logging
@@ -24,7 +25,8 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 import mplfinance as mpf
 
-from moex import loadCandlesPage, candles, series, toDfSeries, futSeries, secInfo
+from moex import loadCandlesPage, candles, series, toDfSeries, futSeries, secInfo, validCandlesInterval
+
 
 def kMeansCentrioids(x):
     """Preprocessing Kmeans. Add Kmeans levels """
@@ -109,35 +111,35 @@ def calcLevels(df, validateLearnRatio=0.9):
     return lev
 
 
-def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging.Logger):
+def genLevelsForTiker(tikers=[], output_filepath='.//',start='', end='', interval='1', logger=logging.Logger):
+    start = start if start else pd.Timestamp.today().floor(freq='D')
+    end = end if end else (pd.Timestamp.today() + pd.Timedelta('1D')).floor(freq='D')
     output_filepath = Path(output_filepath)
     assert output_filepath.exists() and output_filepath.is_dir(), f'Wrong path: {output_filepath}'
     for tik in tikers:
         logger.info(f'Tiker: {tik}')
         exportFilePath = output_filepath / (tik + '.txt')
         logger.info(f'Filename: {exportFilePath}')
-        df = pd.DataFrame()
-
         tikInfo, engine, market, board, tikInfoTraded = secInfo(tik) # Load tiker info
-
         if not tikInfo:
             print(f'Error loading {tik}')
             exit(-1)
-        # s = namedtuple('sec',sInfo['securities']['columns'])
-        # tikInfo = s(*sInfo['securities']['data'][0])
-
-
         # Load data page by pege till got empty data
-        for timeout in range(100):
-            logger.debug(f'df.shape{df.shape}, {df.index.max()}')
-            dfTmp = candles(sec=tik, interval=timeFrame,
-                            dateFrom=datetime.now() - timedelta(days=days),
-                            dateTo=datetime.now() + timedelta(days=1),
-                            start=str(df.shape[0])
-                            )
-            if dfTmp.shape[0] == 0: # chek df is empty then exit
-                break
-            df = pd.concat([df,dfTmp])
+
+        df = pd.DataFrame()
+        freq = 'W' if interval in ['1'] else 'M'
+        for day in pd.period_range(start=start,end=end,freq=freq):
+            lastRow = df.shape[0]
+            for timeout in range(100):
+                dfTmp = candles(sec=tik, interval=interval,
+                                dateFrom=day.start_time, #left.to_pydatetime(),
+                                dateTo=day.end_time, #right.to_pydatetime(),
+                                start=str(df.shape[0]-lastRow)
+                                )
+                if dfTmp.shape[0] == 0: # chek df is empty then exit
+                    break
+                df = pd.concat([df,dfTmp])
+                logger.debug(f'df.shape{df.shape}, {df.index.max()}')
 
         # Rename columns
         for i,name in enumerate(['Open', 'Close', 'High', 'Low', 'value', 'Volume']):
@@ -149,16 +151,9 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         # We need df with standart OHLCV columns only
         df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
 
-        df.shape
-
-        dfS = df.copy()
-        normalization(df)
-
+        logger.info(str(df.shape))
         calculate_fractals(df)
-        # df = indicators(df)
-        calculate_fractals(dfS)
-        # dfS = indicators(dfS)
-        levels = calcLevels(dfS, df, plot=False, validateLearnRatio=1) # get leve
+        levels = calcLevels(df, validateLearnRatio=1) # get leves
         try:# ls
             if tikInfo.type  in ['futures_forts','futures']:
                 levels = list(map(lambda x: int((x//tikInfoTraded.securities.MINSTEP)*tikInfoTraded.securities.MINSTEP), levels)) # round as ticker price step
@@ -167,33 +162,40 @@ def main(tikers=[], output_filepath='.//', days=1, timeFrame='1', logger=logging
         except:
             pass # in INDEX tikers no tikInfo.MINSTEP
         # chose 10 levels nearest to ticker last close value
-        close = dfS.iloc[-1].Close
+        close = df.iloc[-1].Close
         levels = sorted(levels, key=lambda x: abs(x - close) / close)[:10]
         levels = sorted(levels) # final sort to prevent
 
         with exportFilePath.open('wt') as f:
             f.write('\n'.join(map(lambda x: str(x),levels[:10])))
-        print('\n'.join(map(lambda x: str(x),levels)))
+        logger.info(f'{tik} levels: '+ '\n'.join(map(lambda x: str(x),levels)))
 
 if __name__ == "__main__":
     # cProfile.run('main()'#, 'profile_output.txt'
     #              )
-    parser = argparse.ArgumentParser(description='Generate levels for market data.',
+    parser = argparse.ArgumentParser(description='''Generate levels for market data 
+    and write to transaq atf indicator format see https://github.com/yankoval/transaqAtf.git''',
                                      epilog=textwrap.dedent('''   additional information:
-             If you vont to use .ini file put __CONSTANTS__=DEFAULT env variable 
-             and create programm_name.ini file with content: 
-             [DEFAULT] 
-             outFolder = a_section_value
-             [tikers]
-             tikerList = ['SBER','RIZ4']
+             If you vont to use .json config file put LEVELSGENERATOR=file_path env variable or use -c  
+             and create LEVELSGENERATOR.json file with content: 
+             { "tikers": "SBRF"{ "interval": "1", // timeframe for candles 1, 10, 60 ,24, 7, 30
+                                "timedelta": "-1Y", // pandas Time deltas string
+                                }
+               "output_filepath" : "output_filepath" 
+             } 
          '''))
 
     # Add arguments for file path, and tiker list
-    parser.add_argument('-o', '--output_filepath', dest='output_filepath', default='', type=str,
+    parser.add_argument('-o', '--output_filepath', dest='output_filepath', type=str,
+                        help='Output file path.')
+    parser.add_argument('-c', '--config_file', dest='config_file', type=str,
                         help='Output file path.')
     parser.add_argument('-d', '--days', dest='days', default=7, type=int,
                         help='Days to analyze.')
-    parser.add_argument('-t', '--tikers_list', nargs='+', help='Tikers list. <Required> Set flag', required=True)
+    parser.add_argument('-i', '--intervalCandles', dest='intervalCandles', default='60', type=str,
+                        choices=validCandlesInterval,
+                        help='Candles interval: 1 - min, 10 - 10 min, 60 - hour, 24 - day, 7 - week, 30 - month ')
+    parser.add_argument('-t', '--tikers_list', nargs='+', help='Tikers list. Like: "SBER RIH5"')
 
     # Parse command line arguments
     args = parser.parse_args()
@@ -206,11 +208,34 @@ if __name__ == "__main__":
                         datefmt='%Y-%m-%d %H:%M:%S')
 
     logger.debug("Procesing:" + str(args))
-
+    config = {"tikers":{}}
     # read ini file
-    if '__CONSTANTS__' in os.environ:
-        consts = constants.Constants(  # variable='__CONSTANTS__',
-            filename=Path(__file__).with_suffix('.ini'))  # doctest: +SKIP
-        logger.debug(f'ini:{consts}')
-    # Call the main function with the parsed arguments
-    main(tikers=args.tikers_list, output_filepath = args.output_filepath, days=args.days, logger=logger)
+    config_file = args.config_file
+    if Path(__file__).stem.upper() in os.environ:
+        config_file = Path(os.environ[Path(__file__).stem.upper()])
+    if config_file:
+        with config_file.open(mode='r') as f:
+            config['tikers'].update(json.load(f).get('tikers',{}))
+        logger.debug(f"ini file loaded. Total keys:{len(config['tikers'].keys())}")
+    # update with command line tikers list
+    if args.tikers_list:
+        for tik in args.tikers_list:
+            config['tikers'].update({tik:{"timedelta":f'-{args.days} days','intervalCandles': args.intervalCandles}})
+
+    output_filepath = args.output_filepath if args.output_filepath else config.get('output_filepath','.')
+    assert config['tikers'], f'No tikers provided: use conf file or --tikers_list command line option.'
+    for tik,param in config['tikers'].items():
+        # Call the main function with the parsed arguments
+        try:
+            logger.info(f'{tik} with param:{param} processing.')
+            interval = param.get('intervalCandles','10')
+            start = pd.Timestamp(param.get('start')) if param.get('start') \
+                else pd.Timestamp.today().floor(freq='D') + pd.Timedelta(param.get('timedelta')).floor(freq='D')
+            end = pd.Timestamp(param.get('end')) if param.get('start') \
+                else (pd.Timestamp.today() + pd.Timedelta('1D')).floor(freq='D')
+            genLevelsForTiker(tikers=[tik], output_filepath = args.output_filepath
+                              , start=start, end= end, interval=interval,logger=logger
+                              )
+        except Exception as e:
+            logger.error(e)
+    logger.info('Доклад окончил.')

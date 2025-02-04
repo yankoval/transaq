@@ -1,0 +1,19 @@
+{
+  "tikers": {
+    "RTSI": {"timedelta": "-365D",
+          "intervalCandles": "10"
+          },
+     "IMOEX2":  {"timedelta": "-365D",
+          "intervalCandles": "10"
+          },
+     "MXH5":  {"timedelta": "-90D",
+          "intervalCandles": "1"
+          },
+     "RIH5":  {"timedelta": "-90D",
+          "intervalCandles": "1"
+          },
+     "SRH5":  {"timedelta": "-90D",
+          "intervalCandles": "1"
+          }
+    }
+}

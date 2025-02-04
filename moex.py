@@ -17,6 +17,7 @@
 # 24 - 1 день
 # 7 - 1 неделя
 # 31 - 1 месяц
+validCandlesInterval =  ['1', '10', '60', '24', '7', '31']
 
 # Examples:
 # df = pd.read_csv(r'https://iss.moex.com/iss/engines/futures/markets/forts/securities/RIH5/trades.csv?previous_session=1', skiprows=2,header=0, skipfooter=12, delimiter=';')
