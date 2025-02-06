@@ -18,17 +18,13 @@ from sklearn.cluster import DBSCAN
 
 from moex import loadCandlesPage, candles, series, toDfSeries, futSeries, secInfo, validCandlesInterval
 
-
-def kMeansCentrioids(x):
+kMeansKwargsDefault = {"init":"k-means++", "n_init": 4, "n_clusters": 20}#dict(init="random", algorithm= "elkan", n_clusters= 40, n_init= 4)
+def kMeansCentrioids(x,**kwargs):
     """Preprocessing Kmeans. Add Kmeans levels """
-    kmeans = KMeans(init="k-means++", n_clusters=20, n_init=4) # , n_clusters=20, n_init=4
+    kmeans = KMeans(init="random",algorithm="elkan", n_clusters=20, n_init=4) # , n_clusters=20, n_init=4
     #x = list(df)
     a = kmeans.fit(np.reshape(x,(len(x),1)))
-
     return  np.sort(np.transpose(kmeans.cluster_centers_))
-    labels = kmeans.labels_
-    print(np.sort(centroids))
-    print(labels)
 
 def normalization(df,columnSuffix = '', period=233, fixScale=0.1, fixShift = 0.5):
     """Preprocessing normalize
@@ -71,38 +67,38 @@ def calculate_fractals(df):
 #     return  i.df
 
 
-def calcLevels(df, validateLearnRatio=0.9):
+def calcLevels(df,kMeansKwargs=kMeansKwargsDefault):
     """ db scan setting for level clusterization
      lernValidateRatio ratio of records out of the forecastiong for validation"""
     epsLev0, epsLev1  = 800, 0.03 # 0.039
-    # print(df.shape, df.index[0],df.index[-1])
-    dfPast = df.iloc[:int(df.shape[0]*validateLearnRatio)]
-    fh = dfPast.loc[dfPast.fHigh==True].High
-    fl = dfPast.loc[dfPast.fLow==True].Low
-#     print(df.fHigh & (df.index <= df.index.max() - pd.Timedelta(seconds=1)))
-#     fig, ax = plt.subplots(figsize=(20,20/1.68)) #,title=tik
-    #fig = plt.figure(figsize=(40,15))
-    apds, levels  = [],[]
-    for j,f in  enumerate([[fh,kMeansCentrioids(list(fh)),'r'],[fl,kMeansCentrioids(list(fl)),'b']]):
-        # print(j,f[1])
-        levels = levels + list(f[1][0])
+    fh = df.loc[df.fHigh==True].High.values
+    fl = df.loc[df.fLow==True].Low.values
+    levels = []
 
-        #for i,l in enumerate(f[1][0]):
-#         apds = apds + [mpf.make_addplot([l]*len(df), panel='main', color=f[2], linestyle='--') for l in f[1][0]]
-        # mpf.make_addplot([2770]*len(df), panel='main', color='r', linestyle='--'),
-        # ]
-    x1 = np.array(levels).reshape(-1, 1)
-    db = DBSCAN(eps=epsLev1, min_samples=1).fit(x1)
-    # fractals to plot
-    fhToPlot = df.High * df.fHigh #& (df.index <= dfPast.index.max()))
-    fhToPlot[fhToPlot==0] = np.nan
-    flToPlot = df.Low * df.fLow
-    flToPlot[flToPlot==0] = np.nan
-    lev = list([np.array(levels)[np.where(db.labels_==k)].mean() for k in np.unique(db.labels_)])
-    return lev
+    # Keans
+    kmeans = KMeans(**kMeansKwargs) # , n_clusters=20, n_init=4
+    # x = fl.to_list()#fh.to_list()#+fl.to_list()
+    a = kmeans.fit(np.reshape(fh,(len(fh),1)))
+    fh = np.sort(np.transpose(a.cluster_centers_)[0]).tolist()
+    # x = fh.to_list()#+fl.to_list()
+    b = kmeans.fit(np.reshape(fl,(len(fl),1)))
+    fl = np.sort(np.transpose(b.cluster_centers_)[0]).tolist()
+    return fl+fh
+
+    # levels = fl+fh
+    # x1 = np.array(levels).reshape(-1, 1)
+    # db = DBSCAN(eps=epsLev1, min_samples=1).fit(x1)
+    # lev = list([np.array(levels)[np.where(db.labels_==k)].mean() for k in np.unique(db.labels_)])
+    # return lev
 
 
-def genLevelsForTiker(tikers=[], output_filepath='.//',start='', end='', interval='1', logger=logging.Logger):
+def genLevelsForTiker(tikers=[], output_filepath='.//',start='', end='', interval='1', logger=logging.Logger,
+                      **kwargs):
+    """ load OHLCV data from moex then generate kMeans centers list on fractals and write output_filepath
+    for transaq atf indicator
+    tikers= tikers list, interval timeframe,
+    "start" and "end" is  pd.Datetime edges"""
+    kMeansKwargs = kwargs.get("kMeansKwargs")
     start = start if start else pd.Timestamp.today().floor(freq='D')
     end = end if end else (pd.Timestamp.today() + pd.Timedelta('1D')).floor(freq='D')
     output_filepath = Path(output_filepath)
@@ -141,10 +137,11 @@ def genLevelsForTiker(tikers=[], output_filepath='.//',start='', end='', interva
 
         # We need df with standart OHLCV columns only
         df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-
+        df = df.loc[start:end]
         logger.info(str(df.shape))
         calculate_fractals(df)
-        levels = calcLevels(df, validateLearnRatio=1) # get leves
+        logger.debug(f'kMeansKwarg:{kMeansKwargs}')
+        levels = calcLevels(df,kMeansKwargs=kMeansKwargs) # get leves
         try:# ls
             if tikInfo.type  in ['futures_forts','futures']:
                 levels = list(map(lambda x: int((x//tikInfoTraded.securities.MINSTEP)*tikInfoTraded.securities.MINSTEP), levels)) # round as ticker price step
@@ -181,6 +178,8 @@ if __name__ == "__main__":
                         help='Output file path.')
     parser.add_argument('-c', '--config_file', dest='config_file', type=str,
                         help='Output file path.')
+    parser.add_argument('-e', '--end', dest='end', type=str,
+                        help='End datetime')
     parser.add_argument('-d', '--days', dest='days', default=7, type=int,
                         help='Days to analyze.')
     parser.add_argument('-i', '--intervalCandles', dest='intervalCandles', default='60', type=str,
@@ -204,7 +203,7 @@ if __name__ == "__main__":
     logger.debug("Procesing:" + str(args))
     config = {"tikers":{}}
     # read ini file
-    config_file = args.config_file
+    config_file = Path(args.config_file) if args.config_file else ''
     if Path(__file__).stem.upper() in os.environ:
         config_file = Path(os.environ[Path(__file__).stem.upper()])
     if config_file:
@@ -218,17 +217,20 @@ if __name__ == "__main__":
 
     output_filepath = args.output_filepath if args.output_filepath else config.get('output_filepath','.')
     assert config['tikers'], f'No tikers provided: use conf file or --tikers_list command line option.'
-    for tik,param in tqdm(config['tikers'].items()):
+    for tik,param in tqdm(config['tikers'].items(), desc='Tikers:'):
         # Call the main function with the parsed arguments
         try:
             logger.info(f'{tik} with param:{param} processing.')
             interval = param.get('intervalCandles','10')
+            end = pd.Timestamp(args.end) if args.end else (pd.Timestamp(param.get('end')) if param.get('end') \
+                else (pd.Timestamp.today() + pd.Timedelta('1D')).floor(freq='D'))
             start = pd.Timestamp(param.get('start')) if param.get('start') \
-                else pd.Timestamp.today().floor(freq='D') + pd.Timedelta(param.get('timedelta')).floor(freq='D')
-            end = pd.Timestamp(param.get('end')) if param.get('start') \
-                else (pd.Timestamp.today() + pd.Timedelta('1D')).floor(freq='D')
+                else end + pd.Timedelta(param.get('timedelta')).floor(freq='D')
+
             genLevelsForTiker(tikers=[tik], output_filepath = args.output_filepath
-                              , start=start, end= end, interval=interval,logger=logger
+                              , start=start, end= end, interval=interval
+                              , kMeansKwargs = param.get("kMeansKwargs",kMeansKwargsDefault)
+                              , logger=logger
                               )
         except Exception as e:
             logger.error(e)
