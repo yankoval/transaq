@@ -2,6 +2,7 @@
 # module for load market data from moex.com
 # 12/24
 #
+import logging
 
 # moexalgo
 # eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJaVHA2Tjg1ekE4YTBFVDZ5SFBTajJ2V0ZldzNOc2xiSVR2bnVaYWlSNS1NIn0
@@ -93,6 +94,7 @@ def loadCandlesPage(sec:str= 'SBER', dateFrom:date=None, dateTo:date =None, inte
     dateTo = dateFrom + timedelta(days=1) if dateTo is None else dateTo
     if type(sec) is str:
         sec, engines, markets, boards, secInfoTraded  = secInfo(sec)
+        logging.debug(sec, engines, markets, boards, secInfoTraded)
         if not isinstance(sec,tuple):
             raise Exception('Error loading candles page')
     assert interval in ['1','10','60','24','7','31'] # Check interval

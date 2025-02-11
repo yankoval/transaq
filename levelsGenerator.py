@@ -6,6 +6,8 @@ import os
 import coloredlogs
 import logging
 import sys
+from io import StringIO
+import traceback
 
 import argparse
 from pathlib import Path
@@ -233,5 +235,10 @@ if __name__ == "__main__":
                               , logger=logger
                               )
         except Exception as e:
-            logger.error(e)
+            tb = StringIO()
+            traceback.print_exc(file=tb)
+            tb_lines = tb.getvalue().split('\n')
+            error_line = tb_lines[
+                -2]  # The last line is the empty line after the exception, so we take the second last one
+            logger.error("Line: " + error_line.strip().split()[-1] + " - " + str(e))
     logger.info('Доклад окончил.')
