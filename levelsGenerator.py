@@ -240,5 +240,5 @@ if __name__ == "__main__":
             tb_lines = tb.getvalue().split('\n')
             error_line = tb_lines[
                 -2]  # The last line is the empty line after the exception, so we take the second last one
-            logger.error("Line: " + error_line.strip().split()[-1] + " - " + str(e))
+            logger.error("Text exception trace: " + str(tb_lines) + " - " + str(e))
     logger.info('Доклад окончил.')
